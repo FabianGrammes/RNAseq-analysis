@@ -34,7 +34,7 @@ case $key in
 	shift # past argument
 	;;
     --gtf)            # OPTIONAL: path to .gtf
-	GTF="$2" 
+	GTF="$2"
 	shift # past argument
 	;;
     -m|--mastersheet) # file name of the mastersheet
@@ -48,7 +48,7 @@ case $key in
     --RawDir)
 	DIRIN="$2"
 	shift # past argument
-	;;      
+	;;
     --RunType)
         RTYP="$2"  # Accepts makeIdx/mapp
 	shift
@@ -57,21 +57,22 @@ esac
 shift # past argument or value
 done
 
+echo "READIT"
 
-if [ "$RTYP" != "makeIdx" ] && [ "$RTYP" != "mapp" ] && [ "$RTYP" != "ReRun" ] 
+if [ "$RTYP" != "makeIdx" ] && [ "$RTYP" != "mapp" ] && [ "$RTYP" != "ReRun" ]
 then
     echo "ERROR --RunType has to be set to makeIdx/mapp or ReRun"
     exit 1
 fi
-	
+
 #-------------------------------------------------------------------------------
 # CHECK IF THE MAIN VARIABLES HAVE BEEN SET
-    
+
 # check if .fasta file exists
 if [ ! -f "$GENFA" ]; then
     echo 'ERROR1: File' $GENFA 'Does not exist!'
     exit 1
-else 
+else
     echo 'FOUND: File' $GENFA
 fi
 
@@ -79,12 +80,12 @@ fi
 if [ ! -f "$GTF" ]; then
     echo 'ERROR2: File' $GTF 'Does not exist!'
     exit 1
-else 
-    echo 'FOUND: File' $GTF 
+else
+    echo 'FOUND: File' $GTF
 fi
 
 
-   
+
 # Dependent on the --makeIdx option (IDX) check if the main input exists
 if [ "$RTYP" == "makeIdx" ]
 then
@@ -93,7 +94,7 @@ then
 	echo 'ERROR3: You have to specify read length at --read'
 	exit 1
     fi
-    
+
     mkdir -p {slurm,bash,$GENDIR}
     # echo all input variables
     echo ''
@@ -109,23 +110,23 @@ then
     echo $RLEN
     echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
-else  
+else
 
     # check if MASTER file exists
     if [ ! -f "$MASTER" ]
     then
 	echo 'ERROR4: File' $MASTER 'Does not exist!'
 	exit 1
-    else 
-	echo 'FOUND: File' $MASTER 
+    else
+	echo 'FOUND: File' $MASTER
     fi
 
     # Create the folder tree if it does not exist
-    mkdir -p {slurm,bash,star_2pass,mapp_summary,gatk}
+    mkdir -p {slurm,bash,star_2pass,mapp_summary,gatk,gVCF}
 
     #-------------------------------------------------------------------------------
     # Check line terminators in MASTER
-    if cat -v $MASTER | grep -q '\^M' 
+    if cat -v $MASTER | grep -q '\^M'
     then
 	echo 'Converting line terminators'
 	sed 's/\r/\n/g' $MASTER > sheet.tmp
@@ -162,12 +163,12 @@ else
     echo 'STAR command:'
     echo $STAR
     echo '-----------------------'
-    
+
     echo 'Number of samples= ' $END
     echo 'FIRST sample:' $(awk ' NR=='2' {OFS="\t"; print; }' $MASTER)
     echo 'LAST sample:' $(awk ' NR=='$END+1' {OFS="\t"; print; }' $MASTER)
     echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-    
+
 fi
 
 #-------------------------------------------------------------------------------
@@ -186,12 +187,12 @@ cat > bash/snp_call-SJ.sh << EOF
 #SBATCH --ntasks=1
 #SBATCH --job-name=JUNCTIONS
 #SBATCH --output=slurm/snp_call-SJ-%A.out
-  
+
 module list
 date
- 
+
 # convert 2 array
-SJa=($SJ) 
+SJa=($SJ)
 SJa=\$(echo \$SJa | tr "," "\n")
 
 # Join all SJ files
@@ -247,18 +248,18 @@ fi
 
 if [ "$RTYP" == "ReRun"  ]  ## Only use the commands to make the STAR index
 then
-    
+
 cat > bash/snp_call-trim.sh << EOF
 #!/bin/sh
 #SBATCH --ntasks=1
 #SBATCH --array=1-$END
 #SBATCH --job-name=TRIMMER
 #SBATCH --output=slurm/trim-%A_%a.out
-  
+
 module load anaconda
 module list
 date
-  
+
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
 R1A=( \$( ls $DIRIN'/'\$FILEBASE*_R1_*.fastq.gz ))
@@ -282,8 +283,8 @@ fi
 
 if [ "$RTYP" == "mapp"  ] || [ "$RTYP" == "ReRun" ]
 then
-    
-    
+
+
 # eventually kill the old STAR directory after this
 
 # ==============================================================================
@@ -297,7 +298,7 @@ cat > bash/snp_call-Star.sh << EOF
 #SBATCH --mem=60G
 #SBATCH --array=1-$END%8
 #SBATCH --output=slurm/snp_call-Star-%A_%a.out
-    
+
 module load star
 module list
 date
@@ -322,8 +323,8 @@ do
     RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$((\$i+1)))
 done
 
-RG=\$( printf "%s" "\${RGa[@]}" ) 			
-RG=\$(echo \$RG | sed 's/ ,\$//g' ) 
+RG=\$( printf "%s" "\${RGa[@]}" )
+RG=\$(echo \$RG | sed 's/ ,\$//g' )
 #-------------------------------------------------------------------------------
 
 OUT=star_2pass/\$FILEBASE'-2pass-'
@@ -394,7 +395,7 @@ rm \$BAM
 echo '==> Done sorting'
 
 
-picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM 
+picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM
 rm \$BAMC
 echo '==> Done marking duplicates'
 EOF
@@ -410,7 +411,7 @@ cat > bash/snp_call-splitNtrim.sh << EOF
 #SBATCH --output=slurm/snp_call-splitNtrim-%A_%a.out
 
 module load gatk/3.5
-module list 
+module list
 date
 
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
@@ -428,15 +429,14 @@ rm \$BAM_in
 EOF
 
 
-
-cat > bash/snp_call-Variant.sh << EOF
+cat > bash/snp_call-HaploCall.sh << EOF
 #!/bin/bash
-#SBATCH --job-name=variant
-#SBATCH -n 10
+#SBATCH --job-name=gVCF
+#SBATCH -n 4
 #SBATCH --nodes=1
 #SBATCH --array=1-$END%20
-#SBATCH --mem=13G
-#SBATCH --output=slurm/snp_call-variant-%A_%a.out
+#SBATCH --mem=15G
+#SBATCH --output=slurm/snp_call-gVCF-%A_%a.out
 
 module load gatk/3.5
 module list
@@ -445,43 +445,82 @@ date
 # set -o nounset   # Prevent unset variables from been used.
 set -o errexit   # Exit if error occurs
 
-## RNA-seq variant calling as described in GATK best practises https://www.broadinstitute.org/gatk/guide/article?id=3891
-## Best practies scripted below where Last updated on 2015-12-07 11:08:30 in link above
-## Usage test case: sbatch SNP_call.sh ref BAM_in
-
 ## Set variables
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 BAM_cig=gatk/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.splitCig.bam'
-VCF_out=gatk/\$(basename \$BAM_cig .bam).vcf
-VCF_temp=\$VCF_out'.tmp'
+VCF_out=gatk/\$(basename \$BAM_cig .bam).g.vcf.gz
 
-threads=10
-
-
-## Do the variant calling on 2-pass recalibrated BAM.
-## -recoverDanglingHeads is default in gatk 3.5, but was not in previos versions. Use 3.5! 
-
-echo "==> HaplotypeCaller"
+echo "==> HaplotypeCaller: gVCF"
 
 gatk -T HaplotypeCaller \
--R $GENFA -I \$BAM_cig \
+-R $GENFA \
+-I \$BAM_cig \
+-o \$VCF_out \
+-ERC GVCF \
+-nct 4 \
 -dontUseSoftClippedBases \
 -stand_call_conf 20.0 \
 -stand_emit_conf 20.0 \
---num_cpu_threads_per_data_thread \$threads \
--o \$VCF_temp
+-variant_index_type LINEAR \
+-variant_index_parameter 128000
+
 echo '==> Done HaplotypeCaller'
 
-## Do RNA-seq specific filtering
+EOF
+
+
+
+cat > bash/snp_call-myList.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=SNPcall
+#SBATCH -n 1
+#SBATCH --output=slurm/snp_call-SNPcall-%A_%a.out
+
+ls gatk/*.g.vcf > gVCFs.list
+
+EOF
+
+cat > bash/snp_call-SNPcall.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=SNPcall
+#SBATCH -n 4
+#SBATCH --nodes=1
+#SBATCH --array=1-29
+#SBATCH --mem=15G
+#SBATCH --output=slurm/snp_call-SNPcall-%A_%a.out
+
+module load gatk/3.5
+module list
+date
+
+## chromosome id
+CHROM=\$(printf "ssa%02d" \$SLURM_ARRAY_TASK_ID)
+COMBI='gVCF/'\$CHROM'_combined.g.vcf.gz'
+FILT='gVCF/'\$CHROM'_combined.filterd.g.vcf.gz'
+
+
+
+echo '==> GenotypeGVCFs CHROM:' \$CHROM
+-R $GENFA \
+-V gVCFs.list \
+-o \$COMBI \
+-L \$CHROM \
+-nt 4
+echo '==> DONE: GenotypeGVCFs'
+
+
 echo "==> VariantFiltration"
-gatk -T VariantFiltration -R $GENFA -V \$VCF_temp \
+
+gatk -T VariantFiltration \
+-R $GENFA \
+-V \$COMBI \
 -window 35 -cluster 3 \
 -filterName FS -filter "FS>30.0" \
 -filterName QD -filter "QD<2.0" \
--o \$VCF_out
-echo '==> VariantFiltration'
+-o \$FILT
 
-echo "==> Finished"
+echo '==> DONE: VariantFiltration'
+
 EOF
 
 fi
@@ -489,9 +528,9 @@ fi
 
 # SCRIPT SUBMISSION
 
-if [ "$EXECUTE" != "no" ] 
+if [ "$EXECUTE" != "no" ]
 then
-    if [ "$RTYP" == "makeIdx" ] 
+    if [ "$RTYP" == "makeIdx" ]
     then
 	#-------------------------------------------------------------------------------
 	# 1) splice junctions
@@ -500,7 +539,7 @@ then
 	echo '---------------'
 	echo ' Splice junctions'
 	echo ' slurm ID:' $SJjob
-	
+
 	#-------------------------------------------------------------------------------
 	# 2) STAR index
 	command="sbatch --dependency=afterok:$SJjob bash/snp_call-StarIdx.sh"
@@ -528,7 +567,7 @@ then
 	else
 	    command="sbatch --dependency=afterok:$TRjob bash/sbatch-star.sh"
 	fi
-	    
+
 	STARjob=$($command | awk ' { print $4 }')
 	echo '---------------'
 	echo ' 2nd round mapping'
@@ -548,8 +587,8 @@ then
 	echo '---------------'
 	echo ' picard processing'
 	echo ' slurm ID' $PICjob
-    
-    
+
+
 	#-------------------------------------------------------------------------------
 	command="sbatch --dependency=afterok:$PICjob bash/snp_call-splitNtrim.sh"
 	SPLITjob=$($command | awk ' { print $4 }')
@@ -558,12 +597,21 @@ then
 	echo ' slurm ID' $SPLITjob
 
         #-------------------------------------------------------------------------------
-	command="sbatch --dependency=afterok:$SPLITjob bash/snp_call-Variant.sh"
+	command="sbatch --dependency=afterok:$SPLITjob bash/snp_call-HaploCall.sh"
 	VARjob=$($command | awk ' { print $4 }')
 	echo '---------------'
-	echo ' Variant calling+filtering'
 	echo ' slurm ID' $VARjob
-    fi   
+
+        command="sbatch --dependency=afterok:$VARjob bash/snp_call-myList.sh"
+	
+        #-------------------------------------------------------------------------------
+	command="sbatch --dependency=afterok:$VARjob bash/snp_call-SNPcall.sh"
+	VARjob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo ' Variant filtering'
+	echo ' slurm ID' $VARjob
+	
+    fi
 else
     echo '=================='
     echo 'Nothing submitted!'
