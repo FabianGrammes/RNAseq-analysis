@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # ==============================================================================
 # 4) Add read groups, sort, mark duplicates, and create index

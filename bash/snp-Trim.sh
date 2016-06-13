@@ -1,4 +1,4 @@
-
+#!/bin/bash
 cat > bash/snp_call-trim.sh << EOF
 #!/bin/sh
 #SBATCH --ntasks=1
