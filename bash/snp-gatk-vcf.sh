@@ -15,8 +15,8 @@ module list
 date
 
 ## Set variables
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print $2 ; }' $MASTER)
-BAM=\$(ls $BAMDIR/\$FILEBASE'*.bam')
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+BAM=\$(ls $BAMDIR/*.bam | grep \$FILEBASE)
 VCF=vcf/\$(basename \$BAM .bam).g.vcf
 
 echo "==> HaplotypeCaller: gVCF"

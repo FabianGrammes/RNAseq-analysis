@@ -177,13 +177,13 @@ else
 	"BamSub")
 	    if [ ! -d "$BAMDIR"  ] || [ -z "$BAMDIR" ]
 	    then
-		echo "ERROR: Misssing or could not be found" $BAMDIR
+		echo "ERROR: .bam dir Misssing or could not be found" $BAMDIR
 		exit 1
 	    fi
 
 	    if [ ! -f "$BED"  ] || [ -z "$BED" ]
 	    then
-		echo "ERROR: Misssing or could not be found" $BED
+		echo "ERROR: .bed file Misssing or could not be found" $BED
 		exit 1
 	    fi
 	    	    
@@ -194,6 +194,7 @@ else
 	    echo '-----------------------'
 	    echo 'Using .bam subset'
 	    echo 'Location of .bam files =' $BAMDIR
+	    echo '.bed file =' $BED
 	    echo 'Genome .fasta =' $GENFA
 	    echo '.gtf file =' $GTF
 	    echo 'STAR command =' $STAR
@@ -217,7 +218,7 @@ echo $SHPATH
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
 ##==============================================================================
-## PRINTING THE BASH SCRIPTS (executing BASH in BASH: Variables are passed)
+## PRINTING THE BASH SCRIPTS 2 FILE
 ##==============================================================================
 ## sourcing the scriupts ensures that variables are passed down
 
@@ -237,7 +238,7 @@ case "$RTYPE" in
 	;;
     "mapp")
 	## ReRun STAR
-	. $SHPATH/snp-Star.sh
+l	. $SHPATH/snp-Star.sh
 	## Run GATK (BAM) pipeline
 	. $SHPATH/snp-gatk-bam.sh
 	## Run GATK (BAM) pipeline
@@ -246,13 +247,14 @@ case "$RTYPE" in
     "BamSub")
 	## Subset .bam by .bed
 	. $SHPATH/snp-bam-sub.sh
+	BAMDIR=bam_sub
 	## Run GATK (BAM) pipeline
 	. $SHPATH/snp-gatk-vcf.sh
 	;;
 esac
    
 ##==============================================================================
-## SCRIPT SUBMISSION
+## SCRIPT SUBMISSION (INCLUDING DEPENDCY)
 ##==============================================================================
 
 if [ "$EXECUTE" == "no" ]

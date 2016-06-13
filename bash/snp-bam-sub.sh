@@ -12,9 +12,9 @@ module list
 date
 
 ## Set variables
-FILEBASE=$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print $2 ; }' $MASTER)
-BAM_in=\$(ls $BAMDIR/\$FILEBASE'*.bam')
-BAM_sub=gatk/\$FILEBASE'-DeGenesSubset.dedupped.splitCig.bam'
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+BAM_in=\$(ls $BAMDIR/*.bam | grep \$FILEBASE)
+BAM_sub=bam_sub/\$FILEBASE'-DeGenesSubset.dedupped.splitCig.bam'
 
 samtools view -b -L $BED -o \$BAM_sub \$BAM_in
 
