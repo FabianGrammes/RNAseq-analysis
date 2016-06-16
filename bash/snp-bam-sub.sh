@@ -4,7 +4,7 @@ cat > bash/snp_call-BamSub.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=BAMsub
 #SBATCH --nodes=1
-#SBATCH --array=1-$END%20
+#SBATCH --array=1-$END%30
 #SBATCH --output=slurm/snp_call-BamSub-%A_%a.out
 
 module load samtools

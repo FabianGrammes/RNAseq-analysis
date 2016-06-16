@@ -188,7 +188,7 @@ else
 	    fi
 	    	    
 	    ## Create the folder tree if it does not exist
-	    mkdir -p {slurm,bash,bam_sub,gatk,vcf}
+	    mkdir -p {slurm,bash,bam_sub,vcf}
 
 	    ## echo all input variables
 	    echo '-----------------------'
@@ -327,11 +327,19 @@ else
 	    echo '---------------'
 	    echo ' HaploTypeCalling' $job6
 	    ## job 7
-  	    command="sbatch --dependency=afterok:$job6 bash/snp_call-SNPcall.sh"
+  	    command="sbatch --dependency=afterok:$job6 bash/snp_call-myList.sh"
 	    job7=$($command | awk ' { print $4 }')
 	    echo '---------------'
-	    echo ' Variant Joining/filtering' $job7
+	    echo ' Listing g.vcf' $job7	    
+	    ## job 8
+  	    command="sbatch --dependency=afterok:$job7 bash/snp_call-SNPcall.sh"
+	    job8=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Variant Joining/filtering' $job8
 	    ;;
     esac
+
+    echo ' '
+    echo '==>> ALL SUBMITTED <<=='
 fi
-  
+

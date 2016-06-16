@@ -38,9 +38,9 @@ EOF
 
 cat > bash/snp_call-myList.sh << EOF
 #!/bin/bash
-#SBATCH --job-name=SNPcall
+#SBATCH --job-name=List
 #SBATCH -n 1
-#SBATCH --output=slurm/snp_call-SNPcall-%A_%a.out
+#SBATCH --output=slurm/snp_call-gVCF-listl-%A_%a.out
 
 ls vcf/*.g.vcf > gVCFs.list
 
@@ -60,16 +60,14 @@ module list
 date
 
 echo '==> GenotypeGVCFs'
-gatk -T GenotypeGVCFs \ 
--R $GENFA \
+gatk -T GenotypeGVCFs -R $GENFA \
 -V gVCFs.list \
 -o vcf/VCFgenotypes.raw.vcf \
 -nt 4
 echo '==> DONE: GenotypeGVCFs'
 
 echo "==> VariantFiltration"
-gatk -T VariantFiltration \
--R $GENFA \
+gatk -T VariantFiltration -R $GENFA \
 -V vcf/VCFgenotypes.raw.vcf \
 -window 35 -cluster 3 \
 -filterName FS -filter "FS>30.0" \
