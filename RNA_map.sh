@@ -95,7 +95,7 @@ then
 fi
 
 # Default set trimmer to Cutadapt
-if [ -z "$TRIMMER" ] 
+if [ -z "$TRIMMER" ] x
 then 
     TRIMMER=cutadapt
 fi
@@ -189,6 +189,8 @@ echo 'Genome Version:'
 echo $GENOME
 echo '.gtf file'
 echo $GTF
+echo ' Trimmer used:'
+echo $TRIMMER
 echo 'STAR command:'
 echo $STAR
 echo 'HtSeq option stranded:'
@@ -222,7 +224,7 @@ cat > bash/sbatch-trim.sh << EOF
 #!/bin/sh
 #SBATCH --ntasks=1
 #SBATCH --array=1-$END
-#SBATCH --job-name=TRIMMER
+#SBATCH --job-name=cutadapt
 #SBATCH --output=slurm/trim-%A_%a.out
   
 module load anaconda
@@ -254,7 +256,7 @@ cat > bash/sbatch-trimmomatic.sh << EOF
 #!/bin/sh
 #SBATCH --ntasks=2
 #SBATCH --array=1-$END
-#SBATCH --job-name=TRIMMER
+#SBATCH --job-name=trimmomatic
 #SBATCH --output=slurm/trimmomatic-%A_%a.out
   
 module load anaconda trimmomatic
@@ -506,7 +508,7 @@ then
 	fi
     done
     echo '---------------'
-    echo '1) sequences submitted for trimming'
+    echo '1) sequences submitted for trimming:' $TRIMMER
     echo '   slurm ID:' $TrimJobArray
 
     #-------------------------------------------------------------------------------
