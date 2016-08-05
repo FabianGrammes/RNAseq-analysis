@@ -1,9 +1,8 @@
-
 #!/bin/bash
 
 echo ''
 echo $(date)
-echo 'SNP_call.sh Version 1.0.2'
+echo 'SNP_call.sh Version 1.1.0'
 
 #-------------------------------------------------------------------------------
 # Read script arguments and check if files/dirs exist
@@ -20,6 +19,13 @@ case $key in
     --GenFa)      # OPTIONAL: path to genome
 	GENFA="$2"
 	shift # past argument
+	# check if .fasta file exists
+	if [ ! -f "$GENFA" ]; then
+	    echo 'ERROR: File' $GENFA 'Does not exist!'
+	    exit 1
+	else
+	    echo 'FOUND: File' $GENFA
+	fi
 	;;
     --GenDir)      # OPTIONAL: path to the newgenome
 	GENDIR="$2"
@@ -29,20 +35,36 @@ case $key in
 	FADIR="$2"
 	shift # past argument
 	;;
+    --bamDir)     # OPTIONAL: Path to Bam files
+	BAMDIR="$2"
+	shift
+	;;
     --read)      # Read length
-	RLEN="$2"
+	READLEN="$2"
 	shift # past argument
 	;;
     --gtf)            # OPTIONAL: path to .gtf
 	GTF="$2"
 	shift # past argument
+	# check if .gtf file exists
+	if [ ! -f "$GTF" ]; then
+	    echo 'ERROR: File' $GTF 'Does not exist!'
+	    exit 1
+	else
+	    echo 'FOUND: File' $GTF
+	fi
 	;;
     -m|--mastersheet) # file name of the mastersheet
 	MASTER="$2"
 	shift # past argument
+	# check if MASTER file exists
 	;;
     --execute)        # Only used for testing; use --execute no
 	EXECUTE="$2"
+	shift # past argument
+	;;
+    --bed)        # Bed file for subsetting .bam
+	BED="$2"
 	shift # past argument
 	;;
     --RawDir)
@@ -50,570 +72,274 @@ case $key in
 	shift # past argument
 	;;
     --RunType)
-        RTYP="$2"  # Accepts makeIdx/mapp
+        RTYPE="$2"  # Accepts makeIdx/mapp
 	shift
 	;;
 esac
 shift # past argument or value
 done
 
-echo "READIT"
 
-if [ "$RTYP" != "makeIdx" ] && [ "$RTYP" != "mapp" ] && [ "$RTYP" != "ReRun" ]
-then
-    echo "ERROR --RunType has to be set to makeIdx/mapp or ReRun"
-    exit 1
-fi
-
-#-------------------------------------------------------------------------------
-# CHECK IF THE MAIN VARIABLES HAVE BEEN SET
-
-# check if .fasta file exists
-if [ ! -f "$GENFA" ]; then
-    echo 'ERROR1: File' $GENFA 'Does not exist!'
-    exit 1
+if [ -v $READLEN ]; then
+    READLEN="125"
+    echo "SETTING: Read length to" $READLEN	    
 else
-    echo 'FOUND: File' $GENFA
-fi
-
-# check if .gtf file exists
-if [ ! -f "$GTF" ]; then
-    echo 'ERROR2: File' $GTF 'Does not exist!'
-    exit 1
-else
-    echo 'FOUND: File' $GTF
+    echo "FOUND: Read length" $READLEN
 fi
 
 
-
-# Dependent on the --makeIdx option (IDX) check if the main input exists
 if [ "$RTYP" == "makeIdx" ]
 then
-    # check if Read length is set
-    if [ -z "$RLEN" ]; then
-	echo 'ERROR3: You have to specify read length at --read'
-	exit 1
-    fi
-
-    mkdir -p {slurm,bash,$GENDIR}
-    # echo all input variables
-    echo ''
-    echo 'Executing' $EXECUTE
-    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-    echo 'Input arguments:'
-    echo '-----------------------'
-    echo 'Genome .fasta:'
-    echo $GENFA
-    echo '.gtf file'
-    echo $GTF
-    echo 'Read length'
-    echo $RLEN
-    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-
+    	if [ -z "$READLEN" ]; then
+	    echo 'ERROR: You have to specify read length at --read'
+	    exit 1
+	fi
+	mkdir -p {slurm,bash,$GENDIR}
+	# echo all input variables
+	echo ''
+	echo 'Executing' $EXECUTE
+	echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+	echo 'Input arguments:'
+	echo '-----------------------'
+	echo 'Genome .fasta =' $GENFA
+	echo '.gtf file =' $GTF
+	echo 'Read length =' $RLEN
+	echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+	
 else
-
-    # check if MASTER file exists
+    
+    ## 1st check for MASTER
     if [ ! -f "$MASTER" ]
     then
-	echo 'ERROR4: File' $MASTER 'Does not exist!'
+	echo 'ERROR: File' $MASTER 'Does not exist!'
 	exit 1
     else
 	echo 'FOUND: File' $MASTER
     fi
-
-    # Create the folder tree if it does not exist
-    mkdir -p {slurm,bash,star_2pass,mapp_summary,gatk,gVCF}
-
-    #-------------------------------------------------------------------------------
-    # Check line terminators in MASTER
-    if cat -v $MASTER | grep -q '\^M'
+    
+    ## 2ndCheck line terminators in MASTER
+    if cat -v $MASTER | grep -q '\^M' 
     then
 	echo 'Converting line terminators'
 	sed 's/\r/\n/g' $MASTER > sheet.tmp
 	mv sheet.tmp $MASTER
     else
-	echo 'Line terminators seem correct'
+	echo 'Line terminators are correct'
     fi
 
-    # Determine which STAR command to use (e.g STAR/STARlong)
-    if [ "$RLEN" == "300" ]
+    ## Determine which STAR command to use (e.g STAR/STARlong) 
+    if [ "$READLEN" == "300" ] 
     then
 	STAR="STARlong"
     else
 	STAR="STAR"
     fi
-
-    #-------------------------------------------------------------------------------
-    # Number of samples
+    
+    ## Determine the number of samples
     END=$(sed '1d' $MASTER | wc -l) # skip hearder line
 
-    #------------------------------------------------------------------------------
-
-    # echo all input variables
+    ##
     echo ''
-    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
     echo 'Input arguments:'
-    echo '-----------------------'
-    echo 'Location of .fastq files:'
-    echo $FADIR
-    echo 'Genome .fasta:'
-    echo $GENFA
-    echo '.gtf file'
-    echo $GTF
-    echo 'STAR command:'
-    echo $STAR
-    echo '-----------------------'
-
+    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
     echo 'Number of samples= ' $END
     echo 'FIRST sample:' $(awk ' NR=='2' {OFS="\t"; print; }' $MASTER)
     echo 'LAST sample:' $(awk ' NR=='$END+1' {OFS="\t"; print; }' $MASTER)
-    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
+    case "$RTYPE" in
+	"mapp")
+	    ## Create the folder tree if it does not exist
+	    mkdir -p {slurm,bash,star_2pass,mapp_summary,vcf}
+	    
+	    ## echo all input variables
+	    echo '-----------------------'
+	    echo 'mapping'
+	    echo 'Location of .fastq files =' $FADIR
+	    echo 'Genome .fasta =' $GENFA
+	    echo '.gtf file =' $GTF
+	    echo 'STAR command =' $STAR
+	    echo '-----------------------'    	    
+	    ;;
+	"ReRun")
+	    ## Create the folder tree if it does not exist
+	    mkdir -p {slurm,bash,star_2pass,mapp_summary,vcf,fastq_trim}
+
+	    	    ## echo all input variables
+	    echo '-----------------------'
+	    echo 'ReRunning raw .fastq'
+	    echo 'Location of .fastq files =' $FADIR
+	    echo 'Genome .fasta =' $GENFA
+	    echo '.gtf file =' $GTF
+	    echo 'STAR command =' $STAR
+	    echo '-----------------------'
+	    
+	    ;;
+	"BamSub")
+	    if [ ! -d "$BAMDIR"  ] || [ -z "$BAMDIR" ]
+	    then
+		echo "ERROR: .bam dir Misssing or could not be found" $BAMDIR
+		exit 1
+	    fi
+
+	    if [ ! -f "$BED"  ] || [ -z "$BED" ]
+	    then
+		echo "ERROR: .bed file Misssing or could not be found" $BED
+		exit 1
+	    fi
+	    	    
+	    ## Create the folder tree if it does not exist
+	    mkdir -p {slurm,bash,bam_sub,vcf}
+
+	    ## echo all input variables
+	    echo '-----------------------'
+	    echo 'Using .bam subset'
+	    echo 'Location of .bam files =' $BAMDIR
+	    echo '.bed file =' $BED
+	    echo 'Genome .fasta =' $GENFA
+	    echo '.gtf file =' $GTF
+	    echo 'STAR command =' $STAR
+	    echo '-----------------------'
+	    ;;
+	*)
+	    echo "ERROR: Unknown --RunType:" $RTYP
+	    exit 1
+	    ;;
+    esac
 fi
-
+		    
 #-------------------------------------------------------------------------------
+# Path to the R scripts
+SCRIPTPATH=$(readlink -f "$0") # finds the path where the script resides
+HELPPATH=$(dirname "$SCRIPTPATH")/helper_scripts
+SHPATH=$(dirname "$SCRIPTPATH")/bash
 
+echo $SCRIPTPATH
+echo $SHPATH
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
+##==============================================================================
+## PRINTING THE BASH SCRIPTS 2 FILE
+##==============================================================================
+## sourcing the scriupts ensures that variables are passed down
 
+case "$RTYPE" in
+    "makeIdx")
+	## make genome index
+	. $SHPATH/snp-StarIndex.sh
+	;;
+    "ReRun")
+	. $SHPATH/snp-Trim.sh
+	## ReRun STAR
+	. $SHPATH/snp-Star.sh
+	## Run GATK (BAM) pipeline
+	. $SHPATH/snp-gatk-bam.sh
+	## Run GATK (BAM) pipeline
+	. $SHPATH/snp-gatk-vcf.sh
+	;;
+    "mapp")
+	## ReRun STAR
+l	. $SHPATH/snp-Star.sh
+	## Run GATK (BAM) pipeline
+	. $SHPATH/snp-gatk-bam.sh
+	## Run GATK (BAM) pipeline
+	. $SHPATH/snp-gatk-vcf.sh
+	;;
+    "BamSub")
+	## Subset .bam by .bed
+	. $SHPATH/snp-bam-sub.sh
+	BAMDIR=bam_sub
+	## Run GATK (BAM) pipeline
+	. $SHPATH/snp-gatk-vcf.sh
+	;;
+esac
+   
+##==============================================================================
+## SCRIPT SUBMISSION (INCLUDING DEPENDCY)
+##==============================================================================
 
-
-
-if [ "$RTYP" == "makeIdx"  ]  ## Only use the commands to make the STAR index
+if [ "$EXECUTE" == "no" ]
 then
-    # ==============================================================================
-    # 1) Junctions
-cat > bash/snp_call-SJ.sh << EOF
-#!/bin/sh
-#SBATCH --ntasks=1
-#SBATCH --job-name=JUNCTIONS
-#SBATCH --output=slurm/snp_call-SJ-%A.out
-
-module list
-date
-
-# convert 2 array
-SJa=($SJ)
-SJa=\$(echo \$SJa | tr "," "\n")
-
-# Join all SJ files
-for i in \$SJa
-do
-    echo '++>>' $i
-    for ii in \$(ls \$i/*SJ.out.tab)
-    do
-	echo \$ii
-	awk '\$7>1' \$ii >> $GENDIR/SJ_all.tab
-    done
-done
-
-# Filter the joined file
-awk 'BEGIN {OFS="\t"; strChar[0]="."; strChar[1]="+"; strChar[2]="-";} {if(\$5>0){print \$1,\$2,\$3,strChar[\$4]}}' $GENDIR/SJ_all.tab | sort | uniq > $GENDIR/SJ_in.tab
-
-echo '==>>FINISHED'
-EOF
-
-# ==============================================================================
-# 2) Remake the STAR genome index considering the new splice junctions
-
-cat > bash/snp_call-StarIdx.sh << EOF
-#!/bin/sh
-#SBATCH --ntasks=1
-#SBATCH --job-name=StarIdx
-#SBATCH -n 10
-#SBATCH -N 1
-#SBATCH --mem=60G
-#SBATCH --output=slurm/snp_call-StarIdx-%A.out
-
-module load star
-module list
-date
-
-
-STAR --runMode genomeGenerate \
---runThreadN 10 \
---limitGenomeGenerateRAM 62000000000 \
---genomeChrBinNbits 12 \
---genomeDir $GENDIR \
---sjdbGTFtagExonParentTranscript Parent \
---genomeFastaFiles $GENFA \
---sjdbOverhang \$(($RLEN-1)) \
---sjdbFileChrStartEnd $GENDIR/SJ_in.tab \
---sjdbGTFfile $GTF
-
-echo '==>>FINISHED'
-
-EOF
-
-fi
-
-if [ "$RTYP" == "ReRun"  ]  ## Only use the commands to make the STAR index
-then
-
-cat > bash/snp_call-trim.sh << EOF
-#!/bin/sh
-#SBATCH --ntasks=1
-#SBATCH --array=1-$END
-#SBATCH --job-name=TRIMMER
-#SBATCH --output=slurm/trim-%A_%a.out
-
-module load anaconda
-module list
-date
-
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
-
-R1A=( \$( ls $DIRIN'/'\$FILEBASE*_R1_*.fastq.gz ))
-R2A=( \$( ls $DIRIN'/'\$FILEBASE*_R2_*.fastq.gz ))
-
-# Loop in parallel
-count=\${#R1A[@]}
-for i in \`seq 1 \$count\`
-do
-    R1=\${R1A[\$i-1]}
-    O1='fastq_trim/'\$(basename \$R1 | sed 's/.fastq.gz//')'.trim.fastq.gz'
-    R2=\${R2A[\$i-1]}
-    O2='fastq_trim/'\$(basename \$R2 | sed 's/.fastq.gz//')'.trim.fastq.gz'
-    echo "==>>" \$R1 \$R2
-    cutadapt -q 20 -O 8 --minimum-length 40 -a AGATCGGAAGAGC -A AGATCGGAAGAGC -o \$O1 -p \$O2 \$R1 \$R2
-done
-
-EOF
-
-fi
-
-if [ "$RTYP" == "mapp"  ] || [ "$RTYP" == "ReRun" ]
-then
-
-
-# eventually kill the old STAR directory after this
-
-# ==============================================================================
-# 3) ReRun STAR
-
-cat > bash/snp_call-Star.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=STAR2nd
-#SBATCH -n 15
-#SBATCH --nodes=1
-#SBATCH --mem=60G
-#SBATCH --array=1-$END%8
-#SBATCH --output=slurm/snp_call-Star-%A_%a.out
-
-module load star
-module list
-date
-
-SAMPLE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$1 ; }' $MASTER)
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
-
-R1A=( \$( ls $FADIR\$FILEBASE*_R1_*.fastq.gz ))
-R2A=( \$( ls $FADIR\$FILEBASE*_R2_*.fastq.gz ))
-
-R1=\$(printf ",%s" "\${R1A[@]}")
-R2=\$(printf ",%s" "\${R2A[@]}")
-R1=\${R1:1}
-R2=\${R2:1}
-
-#-------------------------------------------------------------------------------
-# BAM read groups:
-RGa=() # Array to hold the read group string
-for ((i=0; i<\${#R1A[@]}; i++))
-do
-    printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary_2pass.txt
-    RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$((\$i+1)))
-done
-
-RG=\$( printf "%s" "\${RGa[@]}" )
-RG=\$(echo \$RG | sed 's/ ,\$//g' )
-#-------------------------------------------------------------------------------
-
-OUT=star_2pass/\$FILEBASE'-2pass-'
-
-echo "Running  --> " \$R1 \$R2
-
-# Run STAR
-$STAR --limitGenomeGenerateRAM 62000000000 \
---genomeDir $GENDIR \
---readFilesCommand zcat \
---readFilesIn \$R1 \$R2 \
---outFileNamePrefix \$OUT \
---outSAMmode Full \
---outSAMtype BAM Unsorted \
---runThreadN 20 \
---readMatesLengthsIn NotEqual \
---outSAMattrRGline \$RG
-
-echo "FILE --> " \$OUT " PROCESSED"
-
-EOF
-
-
-
-cat > bash/snp_call-StarCheck.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=STARstat
-#SBATCH -n 1
-#SBATCH --output=slurm/snp_call-StarStats%j.out
-
-module load R
-module list
-date
-
-cd star_2pass
-R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/STAR_Log.R
-cd ..
-
-EOF
-
-
-# ==============================================================================
-# 4) Add read groups, sort, mark duplicates, and create index
-
-cat > bash/snp_call-mDupl.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=picard
-#SBATCH -n 5
-#SBATCH --nodes=1
-#SBATCH --mem=10G
-#SBATCH --array=1-$END%20
-#SBATCH --output=slurm/snp_call-picard-%A_%a.out
-
-module load samtools picard
-module list
-date
-
-#-------------------------------------------------------------------------------
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
-BAM=star_2pass/\$FILEBASE'-2pass-Aligned.out.bam'
-BAMC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.bam'
-PIC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
-PIM=star_2pass/\$FILEBASE'.dedupped.metrics'
-#-------------------------------------------------------------------------------
-
-samtools sort -@5 -m 2G -o \$BAMC -T \$BAM'.temp' -O bam \$BAM
-rm \$BAM
-echo '==> Done sorting'
-
-
-picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM
-rm \$BAMC
-echo '==> Done marking duplicates'
-EOF
-
-# ==============================================================================
-# 5) Split'N'Trim and reassign mapping qualities
-
-cat > bash/snp_call-splitNtrim.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=splitNtrim
-#SBATCH -n 1
-#SBATCH --array=1-$END
-#SBATCH --output=slurm/snp_call-splitNtrim-%A_%a.out
-
-module load gatk/3.5
-module list
-date
-
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
-BAM_in=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
-BAM_cig=gatk/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.splitCig.bam'
-
-gatk SplitNCigarReads -R $GENFA \
--I \$BAM_in \
--o \$BAM_cig \
--rf ReassignOneMappingQuality -RMQF 255 -RMQT 60 \
--U ALLOW_N_CIGAR_READS
-
-echo '==> Done splitting cigars'
-rm \$BAM_in
-EOF
-
-
-cat > bash/snp_call-HaploCall.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=gVCF
-#SBATCH -n 4
-#SBATCH --nodes=1
-#SBATCH --array=1-$END%20
-#SBATCH --mem=15G
-#SBATCH --output=slurm/snp_call-gVCF-%A_%a.out
-
-module load gatk/3.5
-module list
-date
-
-# set -o nounset   # Prevent unset variables from been used.
-set -o errexit   # Exit if error occurs
-
-## Set variables
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
-BAM_cig=gatk/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.splitCig.bam'
-VCF_out=gatk/\$(basename \$BAM_cig .bam).g.vcf.gz
-
-echo "==> HaplotypeCaller: gVCF"
-
-gatk -T HaplotypeCaller \
--R $GENFA \
--I \$BAM_cig \
--o \$VCF_out \
--ERC GVCF \
--nct 4 \
--dontUseSoftClippedBases \
--stand_call_conf 20.0 \
--stand_emit_conf 20.0 \
--variant_index_type LINEAR \
--variant_index_parameter 128000
-
-echo '==> Done HaplotypeCaller'
-
-EOF
-
-
-
-cat > bash/snp_call-myList.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=SNPcall
-#SBATCH -n 1
-#SBATCH --output=slurm/snp_call-SNPcall-%A_%a.out
-
-ls gatk/*.g.vcf > gVCFs.list
-
-EOF
-
-cat > bash/snp_call-SNPcall.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=SNPcall
-#SBATCH -n 4
-#SBATCH --nodes=1
-#SBATCH --array=1-29
-#SBATCH --mem=15G
-#SBATCH --output=slurm/snp_call-SNPcall-%A_%a.out
-
-module load gatk/3.5
-module list
-date
-
-## chromosome id
-CHROM=\$(printf "ssa%02d" \$SLURM_ARRAY_TASK_ID)
-COMBI='gVCF/'\$CHROM'_combined.g.vcf.gz'
-FILT='gVCF/'\$CHROM'_combined.filterd.g.vcf.gz'
-
-
-
-echo '==> GenotypeGVCFs CHROM:' \$CHROM
--R $GENFA \
--V gVCFs.list \
--o \$COMBI \
--L \$CHROM \
--nt 4
-echo '==> DONE: GenotypeGVCFs'
-
-
-echo "==> VariantFiltration"
-
-gatk -T VariantFiltration \
--R $GENFA \
--V \$COMBI \
--window 35 -cluster 3 \
--filterName FS -filter "FS>30.0" \
--filterName QD -filter "QD<2.0" \
--o \$FILT
-
-echo '==> DONE: VariantFiltration'
-
-EOF
-
-fi
-# ==============================================================================
-
-# SCRIPT SUBMISSION
-
-if [ "$EXECUTE" != "no" ]
-then
-    if [ "$RTYP" == "makeIdx" ]
-    then
-	#-------------------------------------------------------------------------------
-	# 1) splice junctions
-	command='sbatch bash/snp_call-SJ.sh'
-	SJjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' Splice junctions'
-	echo ' slurm ID:' $SJjob
-
-	#-------------------------------------------------------------------------------
-	# 2) STAR index
-	command="sbatch --dependency=afterok:$SJjob bash/snp_call-StarIdx.sh"
-	IDXjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' Making STARindex'
-	echo ' slurm ID' $IDXjob
-    fi
-    if [ "$RTYP" == "ReRun" ]
-    then
-	mkdir -p fastq_trim
-	command="sbatch bash/snp_call-trim.sh"
-	TRjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' Trimming'
-	echo ' slurm ID:' $SJjob
-    fi
-    if [ "$RTYP" == "mapp"  ] || [ "$RTYP" == "ReRun" ]
-    then
-	#-------------------------------------------------------------------------------
-	# 1) 2nd Round STAR
-	if [ -z "$TRjob" ] # if no Trim job exists
-	then
-	    command="sbatch bash/snp_call-Star.sh"
-	else
-	    command="sbatch --dependency=afterok:$TRjob bash/sbatch-star.sh"
-	fi
-
-	STARjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' 2nd round mapping'
-	echo ' slurm ID' $STARjob
-
-	#-------------------------------------------------------------------------------
-	command="sbatch --dependency=afterok:$STARjob bash/snp_call-StarCheck.sh"
-	CHECKjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' star check processing'
-	echo ' slurm ID' $CHECKjob
-
-	#-------------------------------------------------------------------------------
-	# 1) Picard
-	command="sbatch --dependency=afterok:$STARjob bash/snp_call-mDupl.sh"
-	PICjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' picard processing'
-	echo ' slurm ID' $PICjob
-
-
-	#-------------------------------------------------------------------------------
-	command="sbatch --dependency=afterok:$PICjob bash/snp_call-splitNtrim.sh"
-	SPLITjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' splitNtrim processing'
-	echo ' slurm ID' $SPLITjob
-
-        #-------------------------------------------------------------------------------
-	command="sbatch --dependency=afterok:$SPLITjob bash/snp_call-HaploCall.sh"
-	VARjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' slurm ID' $VARjob
-
-        command="sbatch --dependency=afterok:$VARjob bash/snp_call-myList.sh"
-	
-        #-------------------------------------------------------------------------------
-	command="sbatch --dependency=afterok:$VARjob bash/snp_call-SNPcall.sh"
-	VARjob=$($command | awk ' { print $4 }')
-	echo '---------------'
-	echo ' Variant filtering'
-	echo ' slurm ID' $VARjob
-	
-    fi
-else
+    echo ''
     echo '=================='
     echo 'Nothing submitted!'
     echo '=================='
+else
+    case "$RTYPE" in
+	"makeIdx")
+	    ## 1) splice junctions
+	    command='sbatch bash/snp_call-SJ.sh'
+	    job1=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Splice junctions:' $job1
+	    ##-------------------------------------------------------------------------------
+	    ## 2) STAR index
+	    command="sbatch --dependency=afterok:$job1 bash/snp_call-StarIdx.sh"
+	    job2=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Making STARindex:' $job2
+	    ;;
+	"ReRun")
+	    command="sbatch bash/snp_call-trim.sh"
+	    job1=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Trimming:' $job1
+	    # job 2
+	    command="sbatch --dependency=afterok:$job1 bash/sbatch-star.sh"
+	    job2=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' 2nd round mapping' $job2
+	    # job 2.1
+	    command="sbatch --dependency=afterok:$job2 bash/snp_call-StarCheck.sh"
+	    job21=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' star check processing' $job21
+	    ## job 3 Picard
+	    command="sbatch --dependency=afterok:$job2 bash/snp_call-mDupl.sh"
+	    job3=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' picard processing' $job3
+	    ## job 4
+	    command="sbatch --dependency=afterok:$job4 bash/snp_call-splitNtrim.sh"
+	    job5=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' splitNtrim processing' $job5
+	    ## job 6
+	    command="sbatch --dependency=afterok:$job5 bash/snp_call-HaploCall.sh"
+	    job6=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' HaploTypeCalling' $job6
+	    ## job 7
+  	    command="sbatch --dependency=afterok:$job6 bash/snp_call-SNPcall.sh"
+	    job7=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Variant Joining/filtering' $job7
+	    ;;
+	"mapp")
+	    ;;
+	"BamSub")
+	    command="sbatch bash/snp_call-BamSub.sh"
+	    job5=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' BAM subsetting' $job5
+	    ## job 6
+	    command="sbatch --dependency=afterok:$job5 bash/snp_call-HaploCall.sh"
+	    job6=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' HaploTypeCalling' $job6
+	    ## job 7
+  	    command="sbatch --dependency=afterok:$job6 bash/snp_call-myList.sh"
+	    job7=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Listing g.vcf' $job7	    
+	    ## job 8
+  	    command="sbatch --dependency=afterok:$job7 bash/snp_call-SNPcall.sh"
+	    job8=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Variant Joining/filtering' $job8
+	    ;;
+    esac
+
+    echo ' '
+    echo '==>> ALL SUBMITTED <<=='
 fi
+
