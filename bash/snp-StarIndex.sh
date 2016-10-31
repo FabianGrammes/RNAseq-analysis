@@ -28,6 +28,8 @@ done
 # Filter the joined file
 awk 'BEGIN {OFS="\t"; strChar[0]="."; strChar[1]="+"; strChar[2]="-";} {if(\$5>0){print \$1,\$2,\$3,strChar[\$4]}}' $GENDIR/SJ_all.tab | sort | uniq > $GENDIR/SJ_in.tab
 
+cat $GENDIR/SJ_in.tab | grep "^ssa" > $GENDIR/SJ_in_genome.tab # Only utilize genome 
+
 echo '==>>FINISHED'
 EOF
 
@@ -56,7 +58,7 @@ STAR --runMode genomeGenerate \
 --sjdbGTFtagExonParentTranscript Parent \
 --genomeFastaFiles $GENFA \
 --sjdbOverhang \$(($READLEN-1)) \
---sjdbFileChrStartEnd $GENDIR/SJ_in.tab \
+--sjdbFileChrStartEnd $GENDIR/SJ_in_genome.tab \
 --sjdbGTFfile $GTF
 
 echo '==>>FINISHED'

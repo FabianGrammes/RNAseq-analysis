@@ -68,7 +68,7 @@ case $key in
 	shift # past argument
 	;;
     --RawDir)
-	DIRIN="$2"
+	FADIR="$2"
 	shift # past argument
 	;;
     --RunType)
@@ -209,6 +209,8 @@ fi
 		    
 #-------------------------------------------------------------------------------
 # Path to the R scripts
+
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 SCRIPTPATH=$(readlink -f "$0") # finds the path where the script resides
 HELPPATH=$(dirname "$SCRIPTPATH")/helper_scripts
 SHPATH=$(dirname "$SCRIPTPATH")/bash
@@ -238,7 +240,7 @@ case "$RTYPE" in
 	;;
     "mapp")
 	## ReRun STAR
-l	. $SHPATH/snp-Star.sh
+	. $SHPATH/snp-Star.sh
 	## Run GATK (BAM) pipeline
 	. $SHPATH/snp-gatk-bam.sh
 	## Run GATK (BAM) pipeline
@@ -265,7 +267,7 @@ then
     echo '=================='
 else
     case "$RTYPE" in
-	"makeIdx")
+	"makeIdx") ## TESTED; works !
 	    ## 1) splice junctions
 	    command='sbatch bash/snp_call-SJ.sh'
 	    job1=$($command | awk ' { print $4 }')
@@ -278,7 +280,7 @@ else
 	    echo '---------------'
 	    echo ' Making STARindex:' $job2
 	    ;;
-	"ReRun")
+	"ReRun") ## Not TESTED !!
 	    command="sbatch bash/snp_call-trim.sh"
 	    job1=$($command | awk ' { print $4 }')
 	    echo '---------------'
@@ -314,9 +316,57 @@ else
 	    echo '---------------'
 	    echo ' Variant Joining/filtering' $job7
 	    ;;
-	"mapp")
+
+	
+	"mapp") ## Testing
+
+	    
+	    ## MAPP: job 2
+	    command="sbatch bash/snp_call-Star.sh"
+	    job2=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' 2nd round mapping' $job2
+
+	    ## MAPP: job 2.1
+	    command="sbatch --dependency=afterok:$job2 bash/snp_call-StarCheck.sh"
+	    job21=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' star check processing' $job21
+
+	    ## MAPP: job 3 Picard
+	    command="sbatch --dependency=afterok:$job2 bash/snp_call-mDupl.sh"
+	    job3=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' picard processing' $job3
+
+	    ## MAPP: job 4
+	    command="sbatch --dependency=afterok:$job3 bash/snp_call-splitNtrim.sh"
+	    job4=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' splitNtrim processing' $job4
+
+	    ## MAPP: job 5
+	    command="sbatch --dependency=afterok:$job4 bash/snp_call-HaploCall.sh"
+	    job5=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' HaploTypeCalling' $job5
+
+	    ## MAPP: job 6
+  	    command="sbatch --dependency=afterok:$job5 bash/snp_call-myList.sh"
+	    job6=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Listing g.vcf' $job6 
+	    
+	    ## MAPP: job 7
+  	    command="sbatch --dependency=afterok:$job6 bash/snp_call-SNPcall.sh"
+	    job7=$($command | awk ' { print $4 }')
+	    echo '---------------'
+	    echo ' Variant Joining/filtering' $job7
+	    
 	    ;;
-	"BamSub")
+
+
+	"BamSub") ## TESTED, works !
 	    
 	    command="sbatch bash/snp_call-BamSub.sh"
 	    job5=$($command | awk ' { print $4 }')
