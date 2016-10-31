@@ -95,7 +95,7 @@ then
 fi
 
 # Default set trimmer to Cutadapt
-if [ -z "$TRIMMER" ] x
+if [ -z "$TRIMMER" ]
 then 
     TRIMMER=cutadapt
 fi

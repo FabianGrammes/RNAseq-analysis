@@ -13,6 +13,7 @@ cat > bash/snp_call-HaploCall.sh << EOF
 module load gatk/3.5
 module list
 date
+set -o errexit   # Exit if error occurs
 
 ## Set variables
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
@@ -32,7 +33,10 @@ gatk -T HaplotypeCaller \
 -variant_index_type LINEAR \
 -variant_index_parameter 128000
 
-echo '==> Done HaplotypeCaller'
+## success report
+awk -v var="\$FILEBASE" 'BEGIN {print var, "pass"}' >> report_haplocal.txt 
+
+echo "FINISHED"
 
 EOF
 
@@ -58,6 +62,7 @@ cat > bash/snp_call-SNPcall.sh << EOF
 module load gatk/3.5
 module list
 date
+set -o errexit   # Exit if error occurs
 
 echo '==> GenotypeGVCFs'
 gatk -T GenotypeGVCFs -R $GENFA \

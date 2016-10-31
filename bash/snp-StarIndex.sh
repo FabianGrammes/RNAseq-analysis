@@ -55,7 +55,7 @@ STAR --runMode genomeGenerate \
 --genomeDir $GENDIR \
 --sjdbGTFtagExonParentTranscript Parent \
 --genomeFastaFiles $GENFA \
---sjdbOverhang \$(($RLEN-1)) \
+--sjdbOverhang \$(($READLEN-1)) \
 --sjdbFileChrStartEnd $GENDIR/SJ_in.tab \
 --sjdbGTFfile $GTF
 

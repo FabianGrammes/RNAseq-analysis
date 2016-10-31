@@ -79,8 +79,9 @@ esac
 shift # past argument or value
 done
 
+#===============================================================================
 
-if [ -v $READLEN ]; then
+if [ -z "$READLEN" ]; then
     READLEN="125"
     echo "SETTING: Read length to" $READLEN	    
 else
@@ -88,26 +89,25 @@ else
 fi
 
 
-if [ "$RTYP" == "makeIdx" ]
+if [ "$RTYPE" = "makeIdx" ]
 then
-    	if [ -z "$READLEN" ]; then
-	    echo 'ERROR: You have to specify read length at --read'
-	    exit 1
-	fi
-	mkdir -p {slurm,bash,$GENDIR}
-	# echo all input variables
-	echo ''
-	echo 'Executing' $EXECUTE
-	echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-	echo 'Input arguments:'
-	echo '-----------------------'
-	echo 'Genome .fasta =' $GENFA
-	echo '.gtf file =' $GTF
-	echo 'Read length =' $RLEN
-	echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+    if [ -z "$READLEN" ]; then
+	echo 'ERROR: You have to specify read length at --read'
+	exit 1
+    fi
+    mkdir -p {slurm,bash,$GENDIR}
+    # echo all input variables
+    echo ''
+    echo 'Executing' $EXECUTE
+    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+    echo 'Input arguments:'
+    echo '-----------------------'
+    echo 'Genome .fasta =' $GENFA
+    echo '.gtf file =' $GTF
+    echo 'Read length =' $READLEN
+    echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 	
 else
-    
     ## 1st check for MASTER
     if [ ! -f "$MASTER" ]
     then
@@ -317,20 +317,24 @@ else
 	"mapp")
 	    ;;
 	"BamSub")
+	    
 	    command="sbatch bash/snp_call-BamSub.sh"
 	    job5=$($command | awk ' { print $4 }')
 	    echo '---------------'
 	    echo ' BAM subsetting' $job5
+
 	    ## job 6
 	    command="sbatch --dependency=afterok:$job5 bash/snp_call-HaploCall.sh"
 	    job6=$($command | awk ' { print $4 }')
 	    echo '---------------'
 	    echo ' HaploTypeCalling' $job6
+
 	    ## job 7
   	    command="sbatch --dependency=afterok:$job6 bash/snp_call-myList.sh"
 	    job7=$($command | awk ' { print $4 }')
 	    echo '---------------'
 	    echo ' Listing g.vcf' $job7	    
+
 	    ## job 8
   	    command="sbatch --dependency=afterok:$job7 bash/snp_call-SNPcall.sh"
 	    job8=$($command | awk ' { print $4 }')
